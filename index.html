@@ -211,18 +211,21 @@ function el(tag, cls, text){ const e = document.createElement(tag); if(cls) e.cl
 
 function render(){
   const now = Date.now(), q = $('q').value.trim().toLowerCase();
-  $('count').textContent = tasks.filter(t => !t.done).length + ' תזכורות פעילות';
+  const noAl = t => t.alert_mode === 'NONE';
+  { const n = tasks.filter(t => !t.done && noAl(t) === (filter === -1)).length;
+    $('count').textContent = filter === -1 ? (n ? n + ' פריטים ברשימה ללא התראה' : 'הרשימה ריקה') : n + ' תזכורות פעילות'; }
   const chips = $('chips'); chips.innerHTML = '';
   const mk = (label, id, color) => {
     const c = el('div', 'chip' + (filter === id ? ' on' : ''));
     if(color){ const d = el('span', 'dot'); d.style.background = color; c.appendChild(d); }
     c.appendChild(document.createTextNode(label)); c.onclick = () => { filter = id; render(); }; chips.appendChild(c);
   };
-  mk('הכל', null); cats.forEach(c => mk(c.name, c.id, colorOf(c.color)));
+  mk('הכל', null); mk('ללא התראה', -1); cats.forEach(c => mk(c.name, c.id, colorOf(c.color)));
   const byCat = Object.fromEntries(cats.map(c => [c.id, c]));
   $('doneToggle').textContent = (showDone ? 'הסתר' : 'הצג') + ' משימות שהושלמו (' + tasks.filter(t => t.done).length + ')';
   renderSelBar();
-  const shown = tasks.filter(t => (showDone || !t.done) && (filter === null || t.category_id === filter) &&
+  const shown = tasks.filter(t => (showDone || !t.done) &&
+    (q ? true : filter === -1 ? noAl(t) : (!noAl(t) && (filter === null || t.category_id === filter))) &&
     (!q || (t.title + ' ' + t.notes).toLowerCase().includes(q)));
   const list = $('list'); list.innerHTML = '';
   if(!shown.length){ list.appendChild(el('div', 'empty', 'אין תזכורות')); return; }
@@ -316,7 +319,7 @@ function openEd(t){
   const isNew = !t;
   const now = new Date(); now.setHours(now.getHours() + 1, 0, 0, 0);
   ed = isNew
-    ? {id:rid(), alert:'ONCE', dates:[0,1,2].map(i => toLocalInput(now.getTime() + i * 864e5)), title:'', notes:'', cat:0, rep:'NONE', dt:toLocalInput(now.getTime()), sch:{}, vib:'STRONG', sound:'', done:false, isNew:true}
+    ? {id:rid(), alert:(filter === -1 ? 'NONE' : 'ONCE'), dates:[0,1,2].map(i => toLocalInput(now.getTime() + i * 864e5)), title:'', notes:'', cat:0, rep:'NONE', dt:toLocalInput(now.getTime()), sch:{}, vib:'STRONG', sound:'', done:false, isNew:true}
     : {id:t.id, alert:t.alert_mode || 'ONCE', dates:(t.repeat_mode === 'LIST' && dateList(t).length ? dateList(t) : [0,1,2].map(i => t.trigger_at + i * 864e5)).map(toLocalInput), title:t.title, notes:t.notes || '', cat:t.category_id, rep:t.repeat_mode, dt:toLocalInput(t.trigger_at), sch:schedule(t), vib:t.vibration, sound:t.sound || '', done:t.done, isNew:false};
   $('edTitleH').textContent = isNew ? 'תזכורת חדשה' : 'עריכת תזכורת';
   $('edTitle').value = ed.title; $('edNotes').value = ed.notes; $('edDt').value = ed.dt; $('edErr').textContent = '';
