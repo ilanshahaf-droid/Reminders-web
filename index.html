@@ -2,6 +2,10 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>סדר יום</title>
 <style>
@@ -213,7 +217,7 @@ button.sec.on{background:var(--accent);color:#fff;border-color:var(--accent)}
   <div id="diaryView" class="hide">
     <div class="top">
       <div><h1>יומן</h1><div class="sub" id="dyupd"></div></div>
-      <div class="bar" style="margin:0"><button class="ghost" onclick="logout()">התנתק</button></div>
+      <div class="bar" style="margin:0"><button class="sec hide" id="instBtn" onclick="installApp()">⬇ התקן כאפליקציה</button><button class="ghost" onclick="logout()">התנתק</button></div>
     </div>
     <div class="dnav">
       <button class="sec" onclick="dyStep(-1)" aria-label="הקודם">→</button>
@@ -1656,6 +1660,10 @@ async function gDelete(e){
 
 setInterval(() => { if(tab === 'diary' && !document.hidden && sess) loadDiary(); }, 60000);
 
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+let instEv = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); instEv = e; const b = $('instBtn'); if(b) b.classList.remove('hide'); });
+async function installApp(){ if(!instEv) return; instEv.prompt(); await instEv.userChoice; instEv = null; $('instBtn').classList.add('hide'); }
 setTab(tab);
 start();
 </script>
