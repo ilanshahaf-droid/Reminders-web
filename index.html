@@ -13,6 +13,7 @@
 @media (prefers-color-scheme:dark){:root{--bg1:#0e1015;--bg2:#15142a;--card:#1a1d26;--text:#e8eaf2;--sub:#9aa0b8;--accent:#9ea0ff;--err:#ff6b6b;--line:#2f3345}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:var(--text);background:linear-gradient(var(--bg1),var(--bg2)) fixed}
+.wrap.wide{max-width:min(1500px,98vw);padding:12px 12px 20px}
 .wrap{max-width:760px;margin:0 auto;padding:20px 14px 60px}
 h1{font-size:40px;margin:8px 0 2px}
 .sub{color:var(--sub);font-size:18px}
@@ -152,11 +153,11 @@ button.sec.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .dadl .de{font-size:15px;padding:3px 8px;cursor:pointer}
 .dgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .dgrid .dh{background:var(--accent);color:#fff;text-align:center;padding:6px 0;font-size:14px;font-weight:600}
-.dc{background:var(--card);min-height:96px;padding:3px 4px;cursor:pointer;overflow:hidden}
+.dc{background:var(--card);min-height:96px;font-size:15px;padding:3px 4px;cursor:pointer;overflow:hidden}
 .dc.out{opacity:.5}.dc.we{background:color-mix(in srgb,var(--card) 92%,#888)}
 .dc .dn{font-size:14px;font-weight:700;display:inline-block;min-width:22px;text-align:center;border-radius:6px}
 .dc.today .dn{background:#fb8c00;color:#fff}
-.de{font-size:12px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.de{font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .de.ad{border-radius:3px;padding:0 3px;color:var(--text)}
 .dmore{font-size:12px;font-weight:700;color:#fb8c00}
 .dwk{background:var(--card);border-radius:18px;margin:8px 0;padding:10px 14px;cursor:pointer}
@@ -229,7 +230,7 @@ button.sec.on{background:var(--accent);color:#fff;border-color:var(--accent)}
     <div id="dyConn"></div>
     <div id="dymsg" class="err"></div>
     <div id="dybody"></div>
-    <div class="sub" style="text-align:center;margin-top:16px;font-size:13px">היומן מועתק מהטלפון (גוגל קלנדר). הצפייה כאן בלבד, העריכה באפליקציה.</div>
+    <div class="sub" id="dyNote" style="text-align:center;margin-top:16px;font-size:13px">היומן מועתק מהטלפון (גוגל קלנדר), לצפייה בלבד. כדי לערוך, מתחברים ליומן גוגל.</div>
   </div>
   <div id="remView">
   <div class="top">
@@ -1126,7 +1127,7 @@ const NOTE_COLORS = {red:['#F9D0CC','#5C2B29'], orange:['#FCDDB5','#614A19'], ye
 const isDark = () => window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
 const ncolor = k => NOTE_COLORS[k] ? NOTE_COLORS[k][isDark() ? 1 : 0] : '';
 function setTab(t){
-  tab = t; LS.setItem('tab', t);
+  tab = t; LS.setItem('tab', t); document.querySelector('.wrap').classList.toggle('wide', t === 'diary');
   $('diaryView').classList.toggle('hide', t !== 'diary'); $('tabDiary').classList.toggle('on', t === 'diary');
   $('remView').classList.toggle('hide', t !== 'rem'); $('notesView').classList.toggle('hide', t !== 'notes'); $('docsView').classList.toggle('hide', t !== 'docs');
   $('tabRem').classList.toggle('on', t === 'rem'); $('tabNotes').classList.toggle('on', t === 'notes'); $('tabDocs').classList.toggle('on', t === 'docs');
@@ -1352,7 +1353,7 @@ function dyLine(e, withTime){
   return d;
 }
 function renderDiary(){
-  gConnBar();
+  gConnBar(); $('dyNote').classList.toggle('hide', gOn());
   $('dymsg').textContent = dyMissing ? 'טבלת היומן עוד לא קיימת ב-Supabase. הרץ את הקובץ diary.sql ב-SQL Editor, ופתח את האפליקציה בטלפון.' : '';
   ['month', 'week', 'day'].forEach(m => $('dyM_' + m).classList.toggle('on', dyMode === m));
   const box = $('dybody'); box.innerHTML = ''; const todayK = dyKey(new Date());
@@ -1397,12 +1398,14 @@ function renderDiary(){
     }
   } else {
     $('dyTitle').textContent = DY_MONTHS[dyDate.getMonth()] + ' ' + dyDate.getFullYear();
+    const weeks = Math.round((b - a) / 604800000), rowH = Math.max(96, Math.floor((window.innerHeight - 290) / weeks));
     const g = el('div', 'dgrid');
     DY_DAYS.forEach(n => g.appendChild(el('div', 'dh', n)));
     for(let d = new Date(a); d < b; d = dyAddDays(d, 1)){
       const dd = new Date(d), c = el('div', 'dc' + (dd.getMonth() !== dyDate.getMonth() ? ' out' : '') + (dd.getDay() >= 5 ? ' we' : '') + (dyKey(dd) === todayK ? ' today' : ''));
       c.appendChild(el('span', 'dn', String(dd.getDate())));
-      const evs = dyOn(dd), cap = 3;
+      const evs = dyOn(dd), cap = Math.max(2, Math.floor((rowH - 26) / 17));
+      c.style.minHeight = rowH + 'px';
       evs.slice(0, cap).forEach(ev => c.appendChild(dyLine(ev, false)));
       if(evs.length > cap) c.appendChild(el('div', 'dmore', '+' + (evs.length - cap)));
       c.onclick = () => dayPop(dd); g.appendChild(c);
@@ -1662,6 +1665,7 @@ setInterval(() => { if(tab === 'diary' && !document.hidden && sess) loadDiary();
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 let instEv = null;
+addEventListener('resize', () => { if(tab === 'diary' && dyMode === 'month') renderDiary(); });
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); instEv = e; const b = $('instBtn'); if(b) b.classList.remove('hide'); });
 async function installApp(){ if(!instEv) return; instEv.prompt(); await instEv.userChoice; instEv = null; $('instBtn').classList.add('hide'); }
 setTab(tab);
