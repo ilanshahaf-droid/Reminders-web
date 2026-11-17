@@ -1560,7 +1560,8 @@ function gOpenEd(e, date){
   p.appendChild(el('h1', '', e ? 'עריכת אירוע' : 'אירוע חדש')).style.fontSize = '26px';
   const title = el('input', ''); title.placeholder = 'כותרת'; title.value = e ? e.title : ''; p.appendChild(title);
   const cal = document.createElement('select'); writable.forEach(c => { const o = el('option', '', c.summary); o.value = c.id; cal.appendChild(o); });
-  cal.value = e ? e.calId : (writable.find(c => c.primary) || writable[0]).id; cal.disabled = !!e; p.appendChild(cal);
+  cal.value = e ? e.calId : (writable.find(c => c.primary) || writable[0]).id; p.appendChild(cal);
+  if(e && e.rep){ const n = el('div', 'sub', 'שינוי יומן באירוע חוזר מעביר את כל הסדרה'); n.style.fontSize = '13px'; n.style.display = 'none'; p.appendChild(n); cal.onchange = () => { n.style.display = cal.value !== e.calId ? '' : 'none'; }; }
   const adL = el('label', 'ck2'), ad = document.createElement('input'); ad.type = 'checkbox'; ad.checked = e ? e.all_day : false; adL.appendChild(ad); adL.appendChild(el('span', '', 'כל היום')); p.appendChild(adL);
   const r1 = el('div', 'row2'), sd = el('input', ''), st = el('input', ''); sd.type = 'date'; st.type = 'time'; sd.value = gYMD(s0); st.value = gHM(s0); r1.appendChild(sd); r1.appendChild(st); p.appendChild(r1);
   const r2 = el('div', 'row2'), ed = el('input', ''), et = el('input', ''); ed.type = 'date'; et.type = 'time'; ed.value = gYMD(e0); et.value = gHM(e0); r2.appendChild(ed); r2.appendChild(et); p.appendChild(r2);
@@ -1617,6 +1618,11 @@ async function gTruncate(cal, master, instMs, allDay){
   await gApi('/calendars/' + encodeURIComponent(cal) + '/events/' + master.id, {method:'PATCH', body:{recurrence: rec}});
 }
 async function gSaveEv(e, calId, body, repRule, ms0, ms1, allDay){
+  if(e && calId !== e.calId){
+    // events.move: a recurring event moves as a whole series (through its master)
+    await gApi('/calendars/' + encodeURIComponent(e.calId) + '/events/' + (e.rep ? e.rid : e.gid) + '/move?destination=' + encodeURIComponent(calId), {method:'POST'});
+    e = Object.assign({}, e, {calId});
+  }
   const cal = encodeURIComponent(calId);
   if(!e){ if(repRule) body.recurrence = ['RRULE:' + repRule]; await gApi('/calendars/' + cal + '/events', {method:'POST', body}); return; }
   if(!e.rep){ await gApi('/calendars/' + cal + '/events/' + e.gid, {method:'PATCH', body}); return; }
