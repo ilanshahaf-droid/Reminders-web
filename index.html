@@ -279,6 +279,7 @@ button.sec.on{background:var(--accent);color:#fff;border-color:var(--accent)}
     <h1 style="font-size:28px" id="edTitleH">תזכורת</h1>
     <input id="edTitle" placeholder="כותרת">
     <textarea id="edNotes" placeholder="הערות"></textarea>
+    <div class="lbl">📎 מסמכים מקושרים (עד 3)</div><div id="edDocsList"></div><div id="edDocsAdd"></div>
     <div class="lbl">קטגוריה</div><div class="chips" id="edCats"></div>
     <div class="lbl">מצב התראה</div><div class="chips" id="edAlert"></div>
     <div id="edListBox"><div class="lbl">רשימה</div><div class="chips" id="edListChips"></div><input id="edListNew" placeholder="או שם רשימה חדשה" oninput="ed.list = this.value"></div>
@@ -848,6 +849,7 @@ function render(){
         main.appendChild(rd);
       }
       if(t.notes) main.appendChild(el('div', 'notes', t.notes));
+      if(t.docs) { const ls = parseLinks(t.docs); if(ls.length) main.appendChild(linkChips(ls)); }
       card.appendChild(main);
       const cat = byCat[t.category_id];
       if(cat){
@@ -983,12 +985,35 @@ function toLocalInput(ms){ const d = new Date(ms); return d.getFullYear() + '-' 
 function encodeSlots(m){
   return Object.keys(m).map(Number).sort().filter(d => m[d].length).map(d => d + '=' + [...m[d]].sort().join(',')).join(';');
 }
+function renderEdDocs(){
+  const list = $('edDocsList'), add = $('edDocsAdd'); list.innerHTML = ''; add.innerHTML = '';
+  ed.docs.forEach((l, i) => {
+    const row = el('div', 'bar'); row.style.margin = '4px 0';
+    const b = el('button', 'sec', linkIcon(l) + ' ' + linkLabel(l)); b.style.flex = '1'; b.onclick = () => openLink(l);
+    const x = el('button', 'ghost', '✕'); x.onclick = () => { syncEdInputs(); ed.docs.splice(i, 1); renderEd(); };
+    row.appendChild(b); row.appendChild(x); list.appendChild(row);
+  });
+  if(ed.docs.length >= 3) return;
+  if(!docs.length && !docsMissing) loadDocs().then(() => { if(ed && !$('modal').classList.contains('hide')) renderEdDocs(); });
+  const sel = el('select'); sel.appendChild(new Option('＋ מסמך מהרשימה…', ''));
+  docs.forEach(d => sel.appendChild(new Option(d.name, d.name)));
+  sel.onchange = () => { if(!sel.value) return; syncEdInputs(); ed.docs.push({t:'doc', n:sel.value}); renderEd(); };
+  add.appendChild(sel);
+  const r = el('div', 'bar'); r.style.margin = '6px 0 0';
+  const u = el('input'); u.placeholder = 'קישור Drive / OneDrive'; u.style.flex = '1';
+  const n = el('input'); n.placeholder = 'שם (לא חובה)'; n.style.flex = '1';
+  const go = el('button', 'sec', 'הוסף קישור'); go.onclick = () => {
+    const v = u.value.trim(); if(!/^https?:\/\//i.test(v)) return toast('הדבק קישור שמתחיל ב-https');
+    syncEdInputs(); ed.docs.push({t:'url', u:v, n:n.value.trim()}); renderEd();
+  };
+  r.appendChild(u); r.appendChild(n); r.appendChild(go); add.appendChild(r);
+}
 function openEd(t, preset){
   const isNew = !t;
   const now = new Date(); now.setHours(now.getHours() + 1, 0, 0, 0);
   ed = isNew
-    ? {id:rid(), alert:(preset && preset.alert) || (filter === -1 ? 'NONE' : 'ONCE'), list:(preset && preset.list) || (filter === -1 && listFilter ? listFilter : ''), imp:(filter === -3), every:1, anchor:0, origRep:'NONE', origEvery:1, dates:[0,1,2].map(i => toLocalInput(now.getTime() + i * 864e5)), title:'', notes:'', cat:0, rep:'NONE', dt:toLocalInput(now.getTime()), sch:{}, vib:'STRONG', sound:'', done:false, isNew:true}
-    : {id:t.id, alert:t.alert_mode || 'ONCE', list:(t.list_name || ''), imp:!!t.important, every:t.every_n || 1, anchor:t.anchor || 0, origRep:t.repeat_mode, origEvery:t.every_n || 1, lastRec:isRec(t.repeat_mode) ? t.repeat_mode : 'SCHEDULE', dates:(t.repeat_mode === 'LIST' && dateList(t).length ? dateList(t) : [0,1,2].map(i => t.trigger_at + i * 864e5)).map(toLocalInput), title:t.title, notes:t.notes || '', cat:t.category_id, rep:t.repeat_mode, dt:toLocalInput(t.trigger_at), sch:schedule(t), vib:t.vibration, sound:t.sound || '', done:t.done, isNew:false, origNone:t.alert_mode === 'NONE', origTrig:t.trigger_at};
+    ? {id:rid(), alert:(preset && preset.alert) || (filter === -1 ? 'NONE' : 'ONCE'), list:(preset && preset.list) || (filter === -1 && listFilter ? listFilter : ''), imp:(filter === -3), every:1, anchor:0, origRep:'NONE', origEvery:1, dates:[0,1,2].map(i => toLocalInput(now.getTime() + i * 864e5)), title:'', notes:'', docs:[], cat:0, rep:'NONE', dt:toLocalInput(now.getTime()), sch:{}, vib:'STRONG', sound:'', done:false, isNew:true}
+    : {id:t.id, alert:t.alert_mode || 'ONCE', list:(t.list_name || ''), imp:!!t.important, every:t.every_n || 1, anchor:t.anchor || 0, origRep:t.repeat_mode, origEvery:t.every_n || 1, lastRec:isRec(t.repeat_mode) ? t.repeat_mode : 'SCHEDULE', dates:(t.repeat_mode === 'LIST' && dateList(t).length ? dateList(t) : [0,1,2].map(i => t.trigger_at + i * 864e5)).map(toLocalInput), title:t.title, notes:t.notes || '', docs:parseLinks(t.docs), cat:t.category_id, rep:t.repeat_mode, dt:toLocalInput(t.trigger_at), sch:schedule(t), vib:t.vibration, sound:t.sound || '', done:t.done, isNew:false, origNone:t.alert_mode === 'NONE', origTrig:t.trigger_at};
   $('edTitleH').textContent = isNew ? 'תזכורת חדשה' : 'עריכת תזכורת';
   $('edTitle').value = ed.title; $('edNotes').value = ed.notes; $('edDt').value = ed.dt; $('edErr').textContent = '';
   $('edDel').classList.toggle('hide', isNew); $('edDone').classList.toggle('hide', isNew);
@@ -1003,6 +1028,7 @@ function chip(label, on, fn, color){
   c.appendChild(document.createTextNode(label)); c.onclick = fn; return c;
 }
 function renderEd(){
+  renderEdDocs();
   const cc = $('edCats'); cc.innerHTML = '';
   cc.appendChild(chip('ללא', !ed.cat, () => { ed.cat = 0; renderEd(); }));
   cats.forEach(c => cc.appendChild(chip(c.name, ed.cat === c.id, () => { ed.cat = c.id; renderEd(); }, colorOf(c.color))));
@@ -1103,9 +1129,10 @@ async function saveEd(){
   const row = {id:ed.id, title:ed.title.trim(), notes:ed.notes.trim(), category_id:ed.cat, trigger_at:trig,
     repeat_mode:ed.rep, days:0, times:'', slots:ed.rep === 'SCHEDULE' ? encodeSlots(sch) : slotsOut, sound:ed.sound, vibration:ed.vib,
     done:false, fired:fired, snooze_until:0, updated_at:Date.now(), deleted:false,
-    alert_mode:ed.alert, important:!!ed.imp, list_name:(ed.alert === 'NONE' ? (ed.list || '').trim() : ''),
+    alert_mode:ed.alert, important:!!ed.imp, list_name:(ed.alert === 'NONE' ? (ed.list || '').trim() : ''), docs:(ed.docs && ed.docs.length ? JSON.stringify(ed.docs) : ''),
     every_n:(ed.alert !== 'NONE' && (ed.rep === 'DAILY' || ed.rep === 'MONTHLY')) ? (ed.every || 1) : 1, anchor:0};
-  const r = await api('/rest/v1/rem_tasks?on_conflict=id', {method:'POST', headers:{Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify([row])});
+  let r = await api('/rest/v1/rem_tasks?on_conflict=id', {method:'POST', headers:{Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify([row])});
+  if(r.status === 400 && !row.docs){ delete row.docs; r = await api('/rest/v1/rem_tasks?on_conflict=id', {method:'POST', headers:{Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify([row])}); }
   if(!r.ok) return err('השמירה נכשלה (' + r.status + '). האם הרצת את עדכון ה-SQL ב-Supabase?');
   closeEd(); await load(); toast('נשמר. בטלפון זה מתעדכן תוך כ-15 שניות כשהאפליקציה פתוחה, ובכל מקרה עד 15 דקות');
 }
@@ -1134,6 +1161,17 @@ function setTab(t){
   if(t === 'notes') renderNotes();
   if(t === 'docs') loadDocs();
   if(t === 'diary') loadDiary();
+}
+
+// ---------- linked documents (reminders and diary events): app documents or Drive / OneDrive links, up to 3 ----------
+function parseLinks(s){ try{ const a = JSON.parse(s || '[]'); return Array.isArray(a) ? a.filter(x => x && ((x.t === 'doc' && x.n) || (x.t === 'url' && x.u))).slice(0, 3) : []; }catch(e){ return []; } }
+const linkIcon = l => l.t === 'url' ? '🔗' : (/\.pdf$/i.test(l.n) ? '📕' : /\.xlsx$/i.test(l.n) ? '📗' : /\.pptx$/i.test(l.n) ? '📙' : '📘');
+const linkLabel = l => l.t === 'url' ? (l.n || l.u.replace(/^https?:\/\//, '').slice(0, 40)) : l.n;
+function openLink(l){ if(l.t === 'url') window.open(l.u, '_blank', 'noopener'); else openDoc({name:l.n}, /\.pdf$/i.test(l.n)); }
+function linkChips(links){
+  const box = el('div', 'bar'); box.style.margin = '6px 0 0'; box.style.flexWrap = 'wrap';
+  links.forEach(l => { const b = el('button', 'sec', linkIcon(l) + ' ' + linkLabel(l)); b.style.maxWidth = '100%'; b.onclick = e => { e.stopPropagation(); openLink(l); }; box.appendChild(b); });
+  return box;
 }
 
 // ---------- documents ----------
@@ -1334,7 +1372,7 @@ function dyOn(d){
 async function loadDiary(){
   const [a, b] = dyRange();
   if(gOn()){
-    try{ dyEvents = await gLoad(a, b); dyMissing = false; $('dyupd').textContent = 'יומן גוגל · עודכן ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); renderDiary(); return; }
+    try{ dyEvents = await gLoad(a, b); await dyAttachDocs(dyEvents); dyMissing = false; $('dyupd').textContent = 'יומן גוגל · עודכן ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); renderDiary(); return; }
     catch(e){ $('dyupd').textContent = e.message; }
   }
   try{
@@ -1343,6 +1381,15 @@ async function loadDiary(){
     else dyMissing = r.status === 404 || r.status === 400;
   }catch(e){ $('dyupd').textContent = 'שגיאת רשת'; }
   renderDiary();
+}
+// documents linked on the phone are stored with the mirrored diary rows; match them to the live Google events by title and start
+async function dyAttachDocs(list){
+  try{
+    const r = await api('/rest/v1/rem_events?select=title,start_ms,docs&docs=neq.&limit=1000');
+    if(!r.ok) return; const rows = await r.json(), m = {};
+    rows.forEach(x => { if(x.docs) m[x.title + '|' + x.start_ms] = x.docs; });
+    list.forEach(e => { const d = m[e.title + '|' + e.start_ms]; if(d) e.docs = d; });
+  }catch(e){}
 }
 function dyStep(n){ dyDate = dyMode === 'day' ? dyAddDays(dyDate, n) : dyMode === 'week' ? dyAddDays(dyDate, 7 * n) : new Date(dyDate.getFullYear(), dyDate.getMonth() + n, 1); loadDiary(); }
 function dyToday(){ dyDate = new Date(); dyDate.setHours(0, 0, 0, 0); loadDiary(); }
@@ -1425,6 +1472,7 @@ function dayPop(d, only){
     bd.appendChild(el('div', '', e.all_day ? 'כל היום' : '🕐 \u2066' + dyHM(e.start_ms) + ' – ' + dyHM(e.end_ms) + '\u2069'));
     if(e.location) bd.appendChild(el('div', '', '📍 ' + e.location));
     if(e.cal) bd.appendChild(el('div', 'sub', e.cal)).style.fontSize = '14px';
+    if(e.docs) { const ls = parseLinks(e.docs); if(ls.length) bd.appendChild(linkChips(ls)); }
     if(gOn() && e.gid && e.writable){
       const ac = el('div', 'bar'); ac.style.margin = '6px 0 0';
       const ed = el('button', 'sec', '✏️ עריכה'); ed.onclick = ev => { ev.stopPropagation(); gOpenEd(e, d); };
