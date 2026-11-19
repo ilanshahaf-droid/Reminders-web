@@ -1183,16 +1183,17 @@ async function loadDocs(){
   }catch(e){}
   renderDocs();
 }
+const niceName = n => { try { return /%[0-9A-Fa-f]{2}/.test(n) ? decodeURIComponent(n) : n; } catch(e) { return n; } };
 const fmtSize = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
 function renderDocs(){
   $('dmsg').textContent = docsMissing ? 'טבלת המסמכים עוד לא קיימת ב-Supabase. הרץ את הקובץ docs.sql ב-SQL Editor.' : '';
   $('dcount').textContent = docs.length ? docs.length + ' מסמכים' : 'אין מסמכים עדיין';
   const q = ($('dq').value || '').trim().toLowerCase(), box = $('dlist'); box.innerHTML = '';
-  docs.filter(d => !q || d.name.toLowerCase().includes(q)).forEach(d => {
+  docs.filter(d => !q || niceName(d.name).toLowerCase().includes(q)).forEach(d => {
     const pdf = /\.pdf$/i.test(d.name), row = el('div', 'card');
     row.appendChild(el('div', '', pdf ? '📕' : '📄'));
     const mid = el('div', ''); mid.style.flex = '1'; mid.style.minWidth = '0';
-    mid.appendChild(el('div', 'nt', d.name.replace(/\.(pdf|docx)$/i, '')));
+    { const nt = el('div', 'nt', niceName(d.name).replace(/\.(pdf|docx)$/i, '')); nt.style.overflowWrap = 'anywhere'; mid.appendChild(nt); }
     mid.appendChild(el('div', 'sub', fmtSize(d.size || 0) + ' · ' + new Date(d.updated_at).toLocaleDateString('he-IL')));
     row.appendChild(mid);
     const open = el('button', 'sec', pdf ? 'פתח' : 'הורד'); open.onclick = e => { e.stopPropagation(); openDoc(d, pdf); };
@@ -1214,7 +1215,7 @@ async function openDoc(d, view){
   try{
     toast('מוריד…'); const b = await docBlob(d), url = URL.createObjectURL(b);
     if(view) window.open(url, '_blank');
-    else { const a = document.createElement('a'); a.href = url; a.download = d.name; document.body.appendChild(a); a.click(); a.remove(); }
+    else { const a = document.createElement('a'); a.href = url; a.download = niceName(d.name); document.body.appendChild(a); a.click(); a.remove(); }
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   }catch(e){ toast('הפתיחה נכשלה'); }
 }
