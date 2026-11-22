@@ -225,7 +225,12 @@ button.sec.on{background:var(--accent);color:#fff;border-color:var(--accent)}
       <h2 id="dyTitle"></h2>
       <button class="sec" onclick="dyStep(1)" aria-label="הבא">←</button>
       <button class="sec" onclick="dyToday()">היום</button>
+      <button class="sec" onclick="dySearchOpen()" aria-label="חיפוש">🔍</button>
       <span id="dyModes" style="display:flex;gap:4px"><button class="sec" id="dyM_month" onclick="dySet('month')">חודש</button><button class="sec" id="dyM_week" onclick="dySet('week')">שבוע</button><button class="sec" id="dyM_day" onclick="dySet('day')">יום</button></span>
+    </div>
+    <div id="dySearch" class="hide">
+      <div class="bar" style="margin:6px 0"><input id="dyQ" placeholder="חיפוש באירועים ביומן" oninput="dySearchGo()" style="flex:1;min-width:0"><button class="ghost" onclick="dySearchClose()">סגור</button></div>
+      <div id="dyRes"></div>
     </div>
     <div id="dyConn"></div>
     <div id="dymsg" class="err"></div>
@@ -1160,7 +1165,7 @@ function setTab(t){
   $('tabRem').classList.toggle('on', t === 'rem'); $('tabNotes').classList.toggle('on', t === 'notes'); $('tabDocs').classList.toggle('on', t === 'docs');
   if(t === 'notes') renderNotes();
   if(t === 'docs') loadDocs();
-  if(t === 'diary') loadDiary();
+  if(t === 'diary'){ dyWarnPending = true; loadDiary(); }
 }
 
 // ---------- linked documents (reminders and diary events): app documents or Drive / OneDrive links, up to 3 ----------
@@ -1370,7 +1375,10 @@ function dyOn(d){
   return dyEvents.filter(e => { const [a, b] = dyDaysOf(e); return dyKey(a) <= k && k <= dyKey(b); })
     .sort((x, y) => (y.all_day - x.all_day) || (x.start_ms - y.start_ms));
 }
+let dyWarnPending = false;
 async function loadDiary(){
+  // on every entry to the diary: make sure Google Calendar is connected, otherwise say so
+  if(dyWarnPending && sess){ dyWarnPending = false; if(!gOn()) toast('⚠ יומן גוגל לא מחובר – נא להתחבר ליומן גוגל'); }
   const [a, b] = dyRange();
   if(gOn()){
     try{ dyEvents = await gLoad(a, b); await dyAttachDocs(dyEvents); dyMissing = false; $('dyupd').textContent = 'יומן גוגל · עודכן ' + new Date().toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'}); renderDiary(); return; }
@@ -1391,6 +1399,47 @@ async function dyAttachDocs(list){
     rows.forEach(x => { if(x.docs) m[x.title + '|' + x.start_ms] = x.docs; });
     list.forEach(e => { const d = m[e.title + '|' + e.start_ms]; if(d) e.docs = d; });
   }catch(e){}
+}
+// ---- search over the diary's events (a year back, two years ahead) ----
+let dyQt = 0;
+function dySearchOpen(){ $('dySearch').classList.remove('hide'); $('dyQ').focus(); }
+function dySearchClose(){ $('dySearch').classList.add('hide'); $('dyQ').value = ''; $('dyRes').innerHTML = ''; }
+function dySearchGo(){ clearTimeout(dyQt); dyQt = setTimeout(dyDoSearch, 300); }
+async function dyDoSearch(){
+  const q = $('dyQ').value.trim(), box = $('dyRes'); box.innerHTML = '';
+  if(!q) return;
+  box.appendChild(el('div', 'sub', 'מחפש…'));
+  const now = Date.now(); let list = [];
+  try{
+    if(gOn()){
+      const lo = new Date(now - 365 * 864e5).toISOString(), hi = new Date(now + 730 * 864e5).toISOString();
+      const cl = await gApi('/users/me/calendarList?minAccessRole=reader');
+      const all = await Promise.all(cl.items.filter(c => c.selected !== false).map(async c => {
+        try{
+          const r = await gApi('/calendars/' + encodeURIComponent(c.id) + '/events?singleEvents=true&orderBy=startTime&maxResults=250&q=' + encodeURIComponent(q) + '&timeMin=' + encodeURIComponent(lo) + '&timeMax=' + encodeURIComponent(hi));
+          return r.items.filter(x => x.status !== 'cancelled' && x.start && x.end).map(x => gMap(x, c));
+        }catch(e){ return []; }
+      }));
+      list = all.flat();
+    } else {
+      const p = encodeURIComponent('*' + q.replace(/[,()*%]/g, ' ') + '*');
+      const r = await api('/rest/v1/rem_events?select=*&title=ilike.' + p + '&start_ms=gte.' + (now - 365 * 864e5) + '&start_ms=lt.' + (now + 730 * 864e5) + '&order=start_ms&limit=200');
+      if(r.ok) list = await r.json();
+    }
+  }catch(e){ if($('dyQ').value.trim() !== q) return; box.innerHTML = ''; box.appendChild(el('div', 'err', e.message)); return; }
+  if($('dyQ').value.trim() !== q) return;
+  box.innerHTML = '';
+  if(!list.length){ box.appendChild(el('div', 'sub', 'לא נמצא כלום' + (gOn() ? '' : ' (היומן לא מחובר – החיפוש בהעתק מהטלפון)'))); return; }
+  list = list.filter((e, i, a) => a.findIndex(x => (x.gid || x.id) === (e.gid || e.id) && x.start_ms === e.start_ms) === i);
+  list.sort((x, y) => { const fx = x.end_ms >= now, fy = y.end_ms >= now; return fx !== fy ? (fx ? -1 : 1) : fx ? x.start_ms - y.start_ms : y.start_ms - x.start_ms; });
+  list.slice(0, 100).forEach(e => {
+    const [a] = dyDaysOf(e), row = el('div', 'dcard'); row.style.cssText = 'padding:10px 12px;margin:6px 0;border-radius:12px;cursor:pointer;border:1px solid var(--line, #8883)';
+    const t = el('div', '', e.title); t.style.cssText = 'font-weight:600;color:' + dyCol(e); row.appendChild(t);
+    row.appendChild(el('div', 'sub', DY_DAYS[a.getDay()] + ' ' + a.toLocaleDateString('he-IL') + ' · ' + (e.all_day ? 'כל היום' : dyHM(e.start_ms)) + (e.cal ? ' · ' + e.cal : '')));
+    if(e.location) row.appendChild(el('div', 'sub', '📍 ' + e.location));
+    row.onclick = () => { dyDate = new Date(a); dyDate.setHours(0, 0, 0, 0); dyMode = 'day'; LS.setItem('dyMode', 'day'); dySearchClose(); loadDiary(); };
+    box.appendChild(row);
+  });
 }
 function dyStep(n){ dyDate = dyMode === 'day' ? dyAddDays(dyDate, n) : dyMode === 'week' ? dyAddDays(dyDate, 7 * n) : new Date(dyDate.getFullYear(), dyDate.getMonth() + n, 1); loadDiary(); }
 function dyToday(){ dyDate = new Date(); dyDate.setHours(0, 0, 0, 0); loadDiary(); }
@@ -1566,8 +1615,10 @@ function gConnBar(){
     const out = el('button', 'ghost', 'נתק'); out.onclick = gDisconnect; b.appendChild(out);
   } else {
     const was = !!LS.getItem('gconn');
-    const c = el('button', 'sec', was ? '🔄 חידוש החיבור ליומן גוגל' : '✏️ חיבור ליומן גוגל לעריכה'); c.onclick = gConnect; b.appendChild(c);
-    if(!was) b.appendChild(el('span', 'sub', ' (בלי חיבור היומן מוצג לצפייה בלבד)'));
+    const w = el('div', '', '⚠ יומן גוגל לא מחובר – נא להתחבר ליומן גוגל. בלי חיבור היומן מוצג לצפייה בלבד (העתק מהטלפון), ואי אפשר לערוך.');
+    w.style.cssText = 'border:1px solid var(--err);color:var(--err);border-radius:12px;padding:8px 12px;margin:8px 0;font-weight:600';
+    b.appendChild(w);
+    const c = el('button', '', was ? '🔄 חידוש החיבור ליומן גוגל' : '🔗 התחבר ליומן גוגל'); c.onclick = gConnect; b.appendChild(c);
   }
 }
 function gAskScope(title){
